@@ -10,6 +10,7 @@ Para ejecutarlo directamente desde la web sin descargar el archivo, abre PowerSh
 
 ```PowerShell
 $url = "https://raw.githubusercontent.com/fbettic/ScriptCollection/refs/heads/main/Install-WiFiPowerManager.ps1"
-Invoke-Command -ScriptBlock ([ScriptBlock]::Create((Invoke-RestMethod -Uri $url))) -Ar```
+Invoke-Command -ScriptBlock ([ScriptBlock]::Create((Invoke-RestMethod -Uri $url))) -Ar 
+```
 
 ---
