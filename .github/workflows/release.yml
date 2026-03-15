@@ -16,7 +16,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: ubuntu-20.04
+          - os: ubuntu-latest
             platform: linux
             artifact_name: epub2pdf
             asset_name: epub2pdf-linux-x64
