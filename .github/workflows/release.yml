@@ -1,0 +1,168 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - "v*" # Trigger on version tags like v1.0.0
+  workflow_dispatch: # Allow manual trigger
+
+permissions:
+  contents: write # Required for creating releases
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-20.04
+            platform: linux
+            artifact_name: epub2pdf
+            asset_name: epub2pdf-linux-x64
+          - os: windows-latest
+            platform: windows
+            artifact_name: epub2pdf.exe
+            asset_name: epub2pdf-windows-x64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pypandoc pyinstaller
+        shell: bash
+
+      - name: Download pandoc
+        run: |
+          python -c "import pypandoc; pypandoc.download_pandoc()"
+        shell: bash
+
+      - name: Build executable
+        working-directory: epub_to_pdf
+        run: |
+          pyinstaller epub_to_pdf.spec --noconfirm --log-level=WARN
+        shell: bash
+
+      - name: Download TinyTeX for release
+        working-directory: epub_to_pdf
+        run: |
+          python scripts/download_tinytex.py --platform ${{ matrix.platform }} --output ../tinytex_dist
+        shell: bash
+
+      - name: Create release package (Linux)
+        if: matrix.platform == 'linux'
+        run: |
+          cd epub_to_pdf/dist
+          tar -czf ../../${{ matrix.asset_name }}.tar.gz ${{ matrix.artifact_name }}
+        shell: bash
+
+      - name: Create release package (Windows)
+        if: matrix.platform == 'windows'
+        run: |
+          cd epub_to_pdf/dist
+          7z a -tzip ../../${{ matrix.asset_name }}.zip ${{ matrix.artifact_name }}
+        shell: bash
+
+      - name: Upload executable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: ${{ matrix.asset_name }}.*
+
+      - name: Upload TinyTeX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tinytex-${{ matrix.platform }}
+          path: tinytex_dist/TinyTeX-*
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release_artifacts
+
+      - name: Display artifact structure
+        run: |
+          ls -R release_artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release_assets
+          find release_artifacts -type f -exec cp {} release_assets/ \;
+          ls -lh release_assets/
+
+      - name: Extract version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Create Release Notes
+        id: release_notes
+        run: |
+          cat > release_notes.md << 'EOF'
+          ## epub2pdf ${{ steps.get_version.outputs.VERSION }}
+
+          ### Downloads
+
+          **Standalone Executables** (no Python required):
+          - **Windows**: `epub2pdf-windows-x64.zip` (~10 MB)
+          - **Linux**: `epub2pdf-linux-x64.tar.gz` (~8 MB)
+
+          **Optional TinyTeX** (for first-time users):
+          - `TinyTeX-*-windows.zip` (~100 MB) - LaTeX engine for Windows
+          - `TinyTeX-*-linux.tar.gz` (~90 MB) - LaTeX engine for Linux
+
+          ### Quick Start
+
+          1. Download the executable for your platform
+          2. Extract the archive
+          3. Run: `./epub2pdf input.epub`
+
+          On first run, TinyTeX will be downloaded automatically if not present (~100 MB).
+
+          ### Features
+
+          - ✅ Standalone executables (no Python installation needed)
+          - ✅ Automatic TinyTeX download on first run
+          - ✅ Unicode font support with embedded Noto fonts
+          - ✅ Preset profiles for fiction, math, and biology books
+          - ✅ Customizable margins, DPI, and layout options
+
+          ### Manual TinyTeX Installation (Optional)
+
+          If you prefer to install TinyTeX manually:
+
+          1. Download the TinyTeX archive for your platform
+          2. Extract to a location of your choice
+          3. Set environment variable: `TINYTEX_HOME=/path/to/tinytex`
+
+          See [RELEASES.md](RELEASES.md) for detailed installation instructions.
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release_assets/*
+          body_path: release_notes.md
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
