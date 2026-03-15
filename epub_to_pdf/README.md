@@ -2,11 +2,12 @@
 
 Convierte archivos EPUB a PDF desde la terminal.
 
-El script se autoaprovisiona en la primera ejecucion:
+El script es autosuficiente en la primera ejecucion:
 
-- Instala dependencias Python faltantes.
+- Instala la dependencia Python faltante (`pypandoc`).
 - Descarga `pandoc` si no esta disponible.
-- Descarga un motor PDF `tectonic` en modo headless (sin instaladores GUI), en cache de usuario.
+- Descarga `TinyTeX` en modo headless (sin instaladores GUI), en cache de usuario.
+- Descarga fuentes locales en `fonts/` para mejorar cobertura de simbolos matematicos Unicode.
 
 ## Instalacion desde GitHub (un comando)
 
@@ -28,7 +29,7 @@ epub2pdf "/ruta/al/archivo.epub" "/ruta/salida/archivo.pdf"
 
 ## Margenes del PDF
 
-Puedes controlar el margen de pagina con `--margin` (usa sintaxis de LaTeX geometry).
+Puedes controlar el margen de pagina con `--margin` (sintaxis de LaTeX geometry).
 
 Valor por defecto: `18mm`.
 
@@ -46,44 +47,21 @@ Referencias rapidas:
 - `12mm`: texto mas compacto, menos espacio en blanco.
 - `10mm`: muy compacto; util para documentos largos.
 
-## Motor PDF y fuente
+## Motor PDF
 
-Por defecto el script prioriza motores con mejor soporte Unicode (`xelatex`, `lualatex`) y luego prueba `tectonic`/`pdflatex`.
+El script usa **TinyTeX** y requiere un motor Unicode (`xelatex` o `lualatex`), priorizando `xelatex`.
 
-Puedes indicar motor preferido:
+Motivos:
 
-```bash
-epub2pdf "/ruta/al/archivo.epub" --pdf-engine xelatex
-```
+- Instalacion automatica sin GUI.
+- Buen manejo de contenido matematico y Unicode con `xelatex`.
+- Compatible con Windows, Linux y macOS con el mismo flujo.
 
-Si el motor preferido no esta instalado, el script usa un fallback automatico y, si hace falta, descarga `tectonic` en modo headless.
-
-Tambien puedes indicar fuente principal (recomendado con `xelatex` o `lualatex`):
-
-```bash
-epub2pdf "/ruta/al/archivo.epub" --pdf-engine xelatex --mainfont "Noto Serif"
-```
-
-### Fuentes locales automaticas
-
-Para evitar instalar fuentes en el sistema, el script puede usar fuentes `.ttf` locales en la carpeta del proyecto.
-
-- `--font-mode auto`: usa fuentes locales si ya existen; si no, usa fuentes del sistema.
-- `--font-mode local`: asegura fuentes locales (descarga automaticamente las necesarias en `fonts/`).
-- `--font-mode system`: solo usa fuentes instaladas en el sistema.
-
-Ejemplos:
-
-```bash
-epub2pdf "/ruta/al/archivo.epub" --pdf-engine xelatex --font-mode local
-epub2pdf "/ruta/al/archivo.epub" --pdf-engine lualatex --font-mode local --fonts-dir "./mis-fuentes"
-```
-
-Nota: el modo de fuentes aplica a `xelatex` y `lualatex`. Si se usa fallback a `tectonic`, se prioriza completar la conversion aunque parte de la configuracion tipografica avanzada puede no aplicar igual.
+No hace falta elegir motor ni configurar fallback manual.
 
 ## Ajuste de texto e imagen
 
-Nuevas opciones para mejorar maquetacion en PDFs complejos:
+Opciones para mejorar maquetacion en PDFs complejos:
 
 - `--text-layout adaptive|standard`:
   - `adaptive` (recomendado) reduce avisos `Overfull/Underfull hbox`.
@@ -93,7 +71,7 @@ Nuevas opciones para mejorar maquetacion en PDFs complejos:
 Ejemplo recomendado para libros con formulas y muchas imagenes:
 
 ```bash
-epub2pdf "/ruta/al/archivo.epub" --profile math --pdf-engine xelatex --mainfont "Noto Serif" --text-layout adaptive --image-layout contain
+epub2pdf "/ruta/al/archivo.epub" --profile math --text-layout adaptive --image-layout contain
 ```
 
 Ejemplo recomendado para biologia (ilustraciones):
@@ -104,25 +82,20 @@ epub2pdf "/ruta/al/archivo.epub" --profile biology --text-layout adaptive --imag
 
 ## Warnings frecuentes de TeX
 
-- `Missing character ...`: la fuente actual no cubre ese simbolo (por ejemplo `pi` o `phi`).
-  Suele mejorar usando `--pdf-engine xelatex --mainfont "Noto Serif"`.
+- `Missing character ...`: el documento puede incluir simbolos o glifos poco comunes.
+  El script usa fuentes locales (`Noto Serif` y `Noto Sans Math`) para cubrir mejor simbolos como `φ` y `π`.
 - `Overfull/Underfull hbox`: ajuste de parrafos y saltos de linea. No suele impedir generar el PDF.
-  Puedes mitigarlo con `--text-layout adaptive`, subiendo margen (`--margin 15mm` o `18mm`) o cambiando fuente.
-- `build may not be reproducible in other environments`: aviso informativo del motor por rutas temporales absolutas.
+  Puedes mitigarlo con `--text-layout adaptive`, subiendo margen (`--margin 15mm` o `18mm`).
+- `build may not be reproducible in other environments`: aviso informativo por rutas temporales absolutas.
   No afecta normalmente al PDF final en tu equipo.
 
 ## Perfiles predefinidos
 
-El script incluye perfiles para casos comunes. Puedes usarlos con `--profile`:
+Puedes usar perfiles con `--profile`:
 
-- `fiction`: novelas y libros de ficcion sin caracteres especiales raros.
-  Ajustes por defecto: `margin=12mm`, `dpi=180`.
-- `math`: libros con formulas y simbolos matematicos.
-  Ajustes por defecto: `margin=15mm`, `mainfont="Noto Serif"`, `font_mode=local`, `dpi=300`.
-- `biology`: libros de biologia con muchas imagenes/ilustraciones.
-  Ajustes por defecto: `margin=10mm`, `mainfont="Noto Serif"`, `font_mode=local`, `dpi=300`.
-
-Si un perfil sugiere `xelatex` y no esta instalado, el script hace fallback automatico a un motor disponible (incluyendo descarga headless de `tectonic` si hace falta).
+- `fiction`: `margin=12mm`, `dpi=180`.
+- `math`: `margin=15mm`, `dpi=300`.
+- `biology`: `margin=10mm`, `dpi=300`.
 
 Ejemplos:
 
@@ -135,6 +108,6 @@ epub2pdf "/ruta/libro.epub" --profile biology
 Tambien puedes sobrescribir cualquier valor del perfil:
 
 ```bash
-epub2pdf "/ruta/libro.epub" --profile math --margin 12mm --mainfont "STIX Two Text"
+epub2pdf "/ruta/libro.epub" --profile math --margin 12mm
 epub2pdf "/ruta/libro.epub" --profile biology --dpi 240
 ```
