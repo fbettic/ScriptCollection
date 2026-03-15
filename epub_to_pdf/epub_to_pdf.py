@@ -25,23 +25,129 @@ NETWORK_TIMEOUT_SECONDS = 45
 DOWNLOAD_RETRIES = 3
 RETRY_DELAY_SECONDS = 2
 
+LOCAL_FONT_FILES: dict[str, str] = {
+    "NotoSerif-Regular.ttf": "https://github.com/notofonts/noto-fonts/raw/main/hinted/ttf/NotoSerif/NotoSerif-Regular.ttf",
+    "NotoSerif-Bold.ttf": "https://github.com/notofonts/noto-fonts/raw/main/hinted/ttf/NotoSerif/NotoSerif-Bold.ttf",
+    "NotoSerif-Italic.ttf": "https://github.com/notofonts/noto-fonts/raw/main/hinted/ttf/NotoSerif/NotoSerif-Italic.ttf",
+    "NotoSerif-BoldItalic.ttf": "https://github.com/notofonts/noto-fonts/raw/main/hinted/ttf/NotoSerif/NotoSerif-BoldItalic.ttf",
+    "NotoSansMath-Regular.ttf": "https://github.com/notofonts/noto-fonts/raw/main/unhinted/ttf/NotoSansMath/NotoSansMath-Regular.ttf",
+}
+
 PROFILE_PRESETS: dict[str, dict[str, str | int | None]] = {
     "fiction": {
         "margin": "12mm",
         "mainfont": None,
         "dpi": 180,
+        "pdf_engine": None,
+        "font_mode": "auto",
+        "text_layout": "adaptive",
+        "image_layout": "contain",
     },
     "math": {
         "margin": "15mm",
         "mainfont": "Noto Serif",
         "dpi": 300,
+        "pdf_engine": "xelatex",
+        "font_mode": "local",
+        "text_layout": "adaptive",
+        "image_layout": "contain",
     },
     "biology": {
         "margin": "10mm",
         "mainfont": "Noto Serif",
         "dpi": 300,
+        "pdf_engine": "xelatex",
+        "font_mode": "local",
+        "text_layout": "adaptive",
+        "image_layout": "contain",
     },
 }
+
+
+def get_local_fonts_dir() -> Path:
+    """Return local directory used to store managed font files."""
+    return Path(__file__).resolve().parent / "fonts"
+
+
+def ensure_local_fonts_available(fonts_dir: Path | None = None) -> Path:
+    """Ensure required local fonts exist in script folder (download if needed)."""
+    target_dir = fonts_dir or get_local_fonts_dir()
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    for filename, url in LOCAL_FONT_FILES.items():
+        path = target_dir / filename
+        if not path.exists():
+            print(f"Font '{filename}' not found. Downloading...", file=sys.stderr)
+            download_file(url, path)
+
+    return target_dir
+
+
+def build_latex_layout_header(
+    text_layout: str,
+    image_layout: str,
+    engine_name: str,
+    mainfont: str | None,
+    font_mode: str,
+    fonts_dir: Path | None = None,
+) -> str:
+    """Build LaTeX header directives for text and image layout tuning."""
+    lines: list[str] = []
+
+    if engine_name in ("xelatex", "lualatex"):
+        local_font_dir: Path | None = None
+        if font_mode == "local":
+            local_font_dir = ensure_local_fonts_available(fonts_dir)
+        elif font_mode == "auto":
+            candidate_dir = fonts_dir or get_local_fonts_dir()
+            if any((candidate_dir / name).exists() for name in LOCAL_FONT_FILES):
+                local_font_dir = ensure_local_fonts_available(candidate_dir)
+
+        if local_font_dir is not None:
+            latex_path = local_font_dir.as_posix()
+            lines.extend(
+                [
+                    r"\usepackage{fontspec}",
+                    r"\usepackage{unicode-math}",
+                    r"\defaultfontfeatures{Ligatures=TeX}",
+                    rf"\setmainfont[Path={{{latex_path}/}},UprightFont=NotoSerif-Regular.ttf,BoldFont=NotoSerif-Bold.ttf,ItalicFont=NotoSerif-Italic.ttf,BoldItalicFont=NotoSerif-BoldItalic.ttf]{{Noto Serif}}",
+                    rf"\setmathfont[Path={{{latex_path}/}}]{{NotoSansMath-Regular.ttf}}",
+                ]
+            )
+        elif mainfont:
+            lines.extend(
+                [
+                    r"\usepackage{fontspec}",
+                    r"\defaultfontfeatures{Ligatures=TeX}",
+                    rf"\setmainfont{{{mainfont}}}",
+                ]
+            )
+
+    if image_layout == "contain":
+        lines.extend(
+            [
+                r"\usepackage{graphicx}",
+                r"\makeatletter",
+                r"\def\maxwidth{\ifdim\Gin@nat@width>\linewidth\linewidth\else\Gin@nat@width\fi}",
+                r"\def\maxheight{\ifdim\Gin@nat@height>\textheight\textheight\else\Gin@nat@height\fi}",
+                r"\setkeys{Gin}{width=\maxwidth,height=\maxheight,keepaspectratio}",
+                r"\makeatother",
+            ]
+        )
+
+    if text_layout == "adaptive":
+        lines.extend(
+            [
+                # Reduce overfull/underfull warnings by allowing a bit more stretch.
+                r"\setlength{\emergencystretch}{3em}",
+                r"\tolerance=1800",
+                r"\hbadness=2500",
+                r"\hfuzz=1pt",
+                r"\vfuzz=1pt",
+            ]
+        )
+
+    return "\n".join(lines)
 
 
 def ensure_python_dependency(import_name: str, pip_name: str | None = None):
@@ -216,13 +322,16 @@ def find_pdf_engine(preferred_engine: str | None = None) -> str | None:
     return None
 
 
-def ensure_pdf_engine_available(preferred_engine: str | None = None) -> str:
+def ensure_pdf_engine_available(preferred_engine: str | None = None, strict: bool = False) -> str:
     """Ensure a LaTeX engine is available to generate PDF output."""
     existing_engine = find_pdf_engine(preferred_engine)
     if existing_engine:
         return existing_engine
 
-    if preferred_engine:
+    if preferred_engine == "tectonic":
+        return ensure_tectonic_available()
+
+    if preferred_engine and strict:
         raise RuntimeError(
             f"Requested PDF engine '{preferred_engine}' is not installed or not in PATH."
         )
@@ -244,6 +353,11 @@ def convert_epub_to_pdf(
     preferred_engine: str | None = None,
     mainfont: str | None = None,
     dpi: int | None = None,
+    text_layout: str = "adaptive",
+    image_layout: str = "contain",
+    font_mode: str = "auto",
+    fonts_dir: Path | None = None,
+    strict_engine: bool = False,
 ) -> None:
     """Convert one EPUB file to PDF."""
     if not input_file.exists():
@@ -254,7 +368,7 @@ def convert_epub_to_pdf(
     pypandoc = ensure_python_dependency("pypandoc")
     ensure_python_dependency("ebooklib", "EbookLib")
     ensure_pandoc_available(pypandoc)
-    pdf_engine = ensure_pdf_engine_available(preferred_engine)
+    pdf_engine = ensure_pdf_engine_available(preferred_engine, strict=strict_engine)
     engine_name = Path(pdf_engine).stem.lower()
 
     extra_args = [f"--pdf-engine={pdf_engine}", "-V", f"geometry:margin={margin}"]
@@ -262,6 +376,29 @@ def convert_epub_to_pdf(
         extra_args.extend(["-V", f"mainfont={mainfont}"])
     if dpi is not None:
         extra_args.append(f"--dpi={dpi}")
+
+    header = build_latex_layout_header(
+        text_layout=text_layout,
+        image_layout=image_layout,
+        engine_name=engine_name,
+        mainfont=mainfont,
+        font_mode=font_mode,
+        fonts_dir=fonts_dir,
+    )
+    if header:
+        with tempfile.TemporaryDirectory(prefix="epub_to_pdf_header_") as temp_dir:
+            header_file = Path(temp_dir) / "layout.tex"
+            header_file.write_text(header, encoding="utf-8")
+            scoped_args = [*extra_args, "--include-in-header", str(header_file)]
+
+            output_file.parent.mkdir(parents=True, exist_ok=True)
+            pypandoc.convert_file(
+                str(input_file),
+                "pdf",
+                outputfile=str(output_file),
+                extra_args=scoped_args,
+            )
+        return
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
     pypandoc.convert_file(
@@ -301,9 +438,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional main font name (useful for xelatex/lualatex, e.g. 'Noto Serif').",
     )
     parser.add_argument(
+        "--font-mode",
+        choices=["auto", "local", "system"],
+        help="Font source strategy for xelatex/lualatex: auto, local (script/fonts), or system.",
+    )
+    parser.add_argument(
+        "--fonts-dir",
+        help="Optional folder path containing TTF fonts for local mode.",
+    )
+    parser.add_argument(
         "--dpi",
         type=int,
         help="Image DPI hint for pandoc (useful for image-heavy books).",
+    )
+    parser.add_argument(
+        "--text-layout",
+        choices=["adaptive", "standard"],
+        help="Text line-breaking strategy. 'adaptive' reduces overfull/underfull warnings.",
+    )
+    parser.add_argument(
+        "--image-layout",
+        choices=["contain", "standard"],
+        help="Image fitting strategy. 'contain' scales oversized images to page bounds.",
     )
     return parser
 
@@ -320,8 +476,22 @@ def main() -> int:
     margin = str(margin_value).strip()
     mainfont_value = args.mainfont if args.mainfont is not None else selected_profile.get("mainfont")
     mainfont = str(mainfont_value).strip() if isinstance(mainfont_value, str) else None
+    font_mode_value = args.font_mode if args.font_mode is not None else selected_profile.get("font_mode", "auto")
+    font_mode = str(font_mode_value).strip()
+    fonts_dir = Path(args.fonts_dir).expanduser().resolve() if args.fonts_dir else None
     dpi_value = args.dpi if args.dpi is not None else selected_profile.get("dpi")
     dpi = int(dpi_value) if isinstance(dpi_value, int) else None
+    engine_value = args.pdf_engine if args.pdf_engine is not None else selected_profile.get("pdf_engine")
+    preferred_engine = str(engine_value) if isinstance(engine_value, str) else None
+    strict_engine = args.pdf_engine is not None
+    text_layout_value = args.text_layout if args.text_layout is not None else selected_profile.get(
+        "text_layout", "adaptive"
+    )
+    text_layout = str(text_layout_value).strip()
+    image_layout_value = args.image_layout if args.image_layout is not None else selected_profile.get(
+        "image_layout", "contain"
+    )
+    image_layout = str(image_layout_value).strip()
 
     if not margin:
         print("Error: --margin cannot be empty.", file=sys.stderr)
@@ -331,14 +501,31 @@ def main() -> int:
         print("Error: --dpi must be greater than 0.", file=sys.stderr)
         return 1
 
+    if font_mode not in ("auto", "local", "system"):
+        print("Error: --font-mode must be 'auto', 'local' or 'system'.", file=sys.stderr)
+        return 1
+
+    if text_layout not in ("adaptive", "standard"):
+        print("Error: --text-layout must be 'adaptive' or 'standard'.", file=sys.stderr)
+        return 1
+
+    if image_layout not in ("contain", "standard"):
+        print("Error: --image-layout must be 'contain' or 'standard'.", file=sys.stderr)
+        return 1
+
     try:
         convert_epub_to_pdf(
             input_path,
             output_path,
             margin=margin,
-            preferred_engine=args.pdf_engine,
+            preferred_engine=preferred_engine,
             mainfont=mainfont,
+            font_mode=font_mode,
+            fonts_dir=fonts_dir,
             dpi=dpi,
+            text_layout=text_layout,
+            image_layout=image_layout,
+            strict_engine=strict_engine,
         )
     except Exception as exc:  # pragma: no cover
         print(f"Error: {exc}", file=sys.stderr)

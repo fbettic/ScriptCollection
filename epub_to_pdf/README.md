@@ -62,13 +62,52 @@ Tambien puedes indicar fuente principal (recomendado con `xelatex` o `lualatex`)
 epub2pdf "/ruta/al/archivo.epub" --pdf-engine xelatex --mainfont "Noto Serif"
 ```
 
+### Fuentes locales automaticas
+
+Para evitar instalar fuentes en el sistema, el script puede usar fuentes `.ttf` locales en la carpeta del proyecto.
+
+- `--font-mode auto`: usa fuentes locales si ya existen; si no, usa fuentes del sistema.
+- `--font-mode local`: asegura fuentes locales (descarga automaticamente las necesarias en `fonts/`).
+- `--font-mode system`: solo usa fuentes instaladas en el sistema.
+
+Ejemplos:
+
+```bash
+epub2pdf "/ruta/al/archivo.epub" --pdf-engine xelatex --font-mode local
+epub2pdf "/ruta/al/archivo.epub" --pdf-engine lualatex --font-mode local --fonts-dir "./mis-fuentes"
+```
+
+Nota: el modo de fuentes aplica principalmente a `xelatex` y `lualatex`.
+
+## Ajuste de texto e imagen
+
+Nuevas opciones para mejorar maquetacion en PDFs complejos:
+
+- `--text-layout adaptive|standard`:
+  - `adaptive` (recomendado) reduce avisos `Overfull/Underfull hbox`.
+- `--image-layout contain|standard`:
+  - `contain` (recomendado) adapta imagenes grandes al ancho/alto de pagina sin deformarlas.
+
+Ejemplo recomendado para libros con formulas y muchas imagenes:
+
+```bash
+epub2pdf "/ruta/al/archivo.epub" --profile math --pdf-engine xelatex --mainfont "Noto Serif" --text-layout adaptive --image-layout contain
+```
+
+Ejemplo recomendado para biologia (ilustraciones):
+
+```bash
+epub2pdf "/ruta/al/archivo.epub" --profile biology --text-layout adaptive --image-layout contain --dpi 300
+```
+
 ## Warnings frecuentes de TeX
 
 - `Missing character ...`: la fuente actual no cubre ese simbolo (por ejemplo `pi` o `phi`).
   Suele mejorar usando `--pdf-engine xelatex --mainfont "Noto Serif"`.
 - `Overfull/Underfull hbox`: ajuste de parrafos y saltos de linea. No suele impedir generar el PDF.
-  Puedes mitigarlo subiendo margen (`--margin 15mm` o `18mm`) o cambiando fuente.
+  Puedes mitigarlo con `--text-layout adaptive`, subiendo margen (`--margin 15mm` o `18mm`) o cambiando fuente.
 - `build may not be reproducible in other environments`: aviso informativo del motor por rutas temporales absolutas.
+  No afecta normalmente al PDF final en tu equipo.
 
 ## Perfiles predefinidos
 
@@ -77,9 +116,11 @@ El script incluye perfiles para casos comunes. Puedes usarlos con `--profile`:
 - `fiction`: novelas y libros de ficcion sin caracteres especiales raros.
   Ajustes por defecto: `margin=12mm`, `dpi=180`.
 - `math`: libros con formulas y simbolos matematicos.
-  Ajustes por defecto: `margin=15mm`, `mainfont="Noto Serif"`, `dpi=300`.
+  Ajustes por defecto: `margin=15mm`, `mainfont="Noto Serif"`, `font_mode=local`, `dpi=300`.
 - `biology`: libros de biologia con muchas imagenes/ilustraciones.
-  Ajustes por defecto: `margin=10mm`, `mainfont="Noto Serif"`, `dpi=300`.
+  Ajustes por defecto: `margin=10mm`, `mainfont="Noto Serif"`, `font_mode=local`, `dpi=300`.
+
+Si un perfil sugiere `xelatex` y no esta instalado, el script hace fallback automatico a un motor disponible (incluyendo descarga headless de `tectonic` si hace falta).
 
 Ejemplos:
 
