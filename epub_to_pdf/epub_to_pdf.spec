@@ -10,6 +10,9 @@ block_cipher = None
 spec_root = Path(SPECPATH)
 fonts_dir = spec_root / 'fonts'
 
+# Set executable name with platform-specific extension
+exe_name = 'epub2pdf.exe' if sys.platform == 'win32' else 'epub2pdf'
+
 a = Analysis(
     ['epub_to_pdf.py'],
     pathex=[],
@@ -48,7 +51,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='epub2pdf',
+    name=exe_name,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
