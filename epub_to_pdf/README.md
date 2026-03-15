@@ -12,7 +12,7 @@ El script es autosuficiente en la primera ejecucion:
 ## Instalacion desde GitHub (un comando)
 
 ```bash
-python -m pip install "git+https://github.com/<tu-org>/<tu-repo>.git#subdirectory=epub_to_pdf"
+python -m pip install "git+https://github.com/fbettic/ScriptCollection.git#subdirectory=epub_to_pdf"
 ```
 
 ## Uso
