@@ -65,7 +65,33 @@ epub2pdf "/ruta/al/archivo.epub" --pdf-engine xelatex --mainfont "Noto Serif"
 ## Warnings frecuentes de TeX
 
 - `Missing character ...`: la fuente actual no cubre ese simbolo (por ejemplo `pi` o `phi`).
-	Suele mejorar usando `--pdf-engine xelatex --mainfont "Noto Serif"`.
+  Suele mejorar usando `--pdf-engine xelatex --mainfont "Noto Serif"`.
 - `Overfull/Underfull hbox`: ajuste de parrafos y saltos de linea. No suele impedir generar el PDF.
-	Puedes mitigarlo subiendo margen (`--margin 15mm` o `18mm`) o cambiando fuente.
+  Puedes mitigarlo subiendo margen (`--margin 15mm` o `18mm`) o cambiando fuente.
 - `build may not be reproducible in other environments`: aviso informativo del motor por rutas temporales absolutas.
+
+## Perfiles predefinidos
+
+El script incluye perfiles para casos comunes. Puedes usarlos con `--profile`:
+
+- `fiction`: novelas y libros de ficcion sin caracteres especiales raros.
+  Ajustes por defecto: `margin=12mm`, `dpi=180`.
+- `math`: libros con formulas y simbolos matematicos.
+  Ajustes por defecto: `margin=15mm`, `mainfont="Noto Serif"`, `dpi=300`.
+- `biology`: libros de biologia con muchas imagenes/ilustraciones.
+  Ajustes por defecto: `margin=10mm`, `mainfont="Noto Serif"`, `dpi=300`.
+
+Ejemplos:
+
+```bash
+epub2pdf "/ruta/libro.epub" --profile fiction
+epub2pdf "/ruta/libro.epub" --profile math
+epub2pdf "/ruta/libro.epub" --profile biology
+```
+
+Tambien puedes sobrescribir cualquier valor del perfil:
+
+```bash
+epub2pdf "/ruta/libro.epub" --profile math --margin 12mm --mainfont "STIX Two Text"
+epub2pdf "/ruta/libro.epub" --profile biology --dpi 240
+```

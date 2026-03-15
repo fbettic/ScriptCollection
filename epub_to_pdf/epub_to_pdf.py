@@ -25,6 +25,24 @@ NETWORK_TIMEOUT_SECONDS = 45
 DOWNLOAD_RETRIES = 3
 RETRY_DELAY_SECONDS = 2
 
+PROFILE_PRESETS: dict[str, dict[str, str | int | None]] = {
+    "fiction": {
+        "margin": "12mm",
+        "mainfont": None,
+        "dpi": 180,
+    },
+    "math": {
+        "margin": "15mm",
+        "mainfont": "Noto Serif",
+        "dpi": 300,
+    },
+    "biology": {
+        "margin": "10mm",
+        "mainfont": "Noto Serif",
+        "dpi": 300,
+    },
+}
+
 
 def ensure_python_dependency(import_name: str, pip_name: str | None = None):
     """Import a dependency or install it on the fly when running standalone."""
@@ -225,6 +243,7 @@ def convert_epub_to_pdf(
     margin: str = "18mm",
     preferred_engine: str | None = None,
     mainfont: str | None = None,
+    dpi: int | None = None,
 ) -> None:
     """Convert one EPUB file to PDF."""
     if not input_file.exists():
@@ -241,6 +260,8 @@ def convert_epub_to_pdf(
     extra_args = [f"--pdf-engine={pdf_engine}", "-V", f"geometry:margin={margin}"]
     if mainfont and engine_name in ("xelatex", "lualatex"):
         extra_args.extend(["-V", f"mainfont={mainfont}"])
+    if dpi is not None:
+        extra_args.append(f"--dpi={dpi}")
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
     pypandoc.convert_file(
@@ -262,9 +283,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional output PDF path. Defaults to input path with .pdf extension.",
     )
     parser.add_argument(
+        "--profile",
+        choices=["fiction", "math", "biology"],
+        help="Preset optimized for fiction, math, or biology books.",
+    )
+    parser.add_argument(
         "--margin",
-        default="18mm",
-        help="PDF page margin for LaTeX geometry (e.g. 12mm, 1.5cm). Default: 18mm.",
+        help="PDF page margin for LaTeX geometry (e.g. 12mm, 1.5cm).",
     )
     parser.add_argument(
         "--pdf-engine",
@@ -275,6 +300,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--mainfont",
         help="Optional main font name (useful for xelatex/lualatex, e.g. 'Noto Serif').",
     )
+    parser.add_argument(
+        "--dpi",
+        type=int,
+        help="Image DPI hint for pandoc (useful for image-heavy books).",
+    )
     return parser
 
 
@@ -284,10 +314,21 @@ def main() -> int:
 
     input_path = Path(args.input_file).expanduser().resolve()
     output_path = resolve_output_path(input_path, args.output_file)
-    margin = str(args.margin).strip()
+    selected_profile = PROFILE_PRESETS.get(args.profile or "", {})
+
+    margin_value = args.margin if args.margin is not None else selected_profile.get("margin", "18mm")
+    margin = str(margin_value).strip()
+    mainfont_value = args.mainfont if args.mainfont is not None else selected_profile.get("mainfont")
+    mainfont = str(mainfont_value).strip() if isinstance(mainfont_value, str) else None
+    dpi_value = args.dpi if args.dpi is not None else selected_profile.get("dpi")
+    dpi = int(dpi_value) if isinstance(dpi_value, int) else None
 
     if not margin:
         print("Error: --margin cannot be empty.", file=sys.stderr)
+        return 1
+
+    if dpi is not None and dpi <= 0:
+        print("Error: --dpi must be greater than 0.", file=sys.stderr)
         return 1
 
     try:
@@ -296,7 +337,8 @@ def main() -> int:
             output_path,
             margin=margin,
             preferred_engine=args.pdf_engine,
-            mainfont=args.mainfont,
+            mainfont=mainfont,
+            dpi=dpi,
         )
     except Exception as exc:  # pragma: no cover
         print(f"Error: {exc}", file=sys.stderr)
