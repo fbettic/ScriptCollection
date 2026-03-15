@@ -182,20 +182,32 @@ def ensure_tectonic_available() -> str:
     raise RuntimeError("Tectonic was downloaded but is not executable in this environment.")
 
 
-def find_pdf_engine() -> str | None:
+def find_pdf_engine(preferred_engine: str | None = None) -> str | None:
     """Return the first available PDF engine executable supported by pandoc."""
-    for engine in ("pdflatex", "xelatex", "lualatex", "tectonic"):
+    candidates: tuple[str, ...]
+    if preferred_engine:
+        candidates = (preferred_engine,)
+    else:
+        # Prefer Unicode-capable engines to reduce missing glyph warnings.
+        candidates = ("xelatex", "lualatex", "tectonic", "pdflatex")
+
+    for engine in candidates:
         path = shutil.which(engine)
         if path:
             return path
     return None
 
 
-def ensure_pdf_engine_available() -> str:
+def ensure_pdf_engine_available(preferred_engine: str | None = None) -> str:
     """Ensure a LaTeX engine is available to generate PDF output."""
-    existing_engine = find_pdf_engine()
+    existing_engine = find_pdf_engine(preferred_engine)
     if existing_engine:
         return existing_engine
+
+    if preferred_engine:
+        raise RuntimeError(
+            f"Requested PDF engine '{preferred_engine}' is not installed or not in PATH."
+        )
 
     return ensure_tectonic_available()
 
@@ -207,7 +219,13 @@ def resolve_output_path(input_file: Path, output_file: str | None) -> Path:
     return input_file.with_suffix(".pdf")
 
 
-def convert_epub_to_pdf(input_file: Path, output_file: Path) -> None:
+def convert_epub_to_pdf(
+    input_file: Path,
+    output_file: Path,
+    margin: str = "18mm",
+    preferred_engine: str | None = None,
+    mainfont: str | None = None,
+) -> None:
     """Convert one EPUB file to PDF."""
     if not input_file.exists():
         raise FileNotFoundError(f"Input file does not exist: {input_file}")
@@ -217,14 +235,19 @@ def convert_epub_to_pdf(input_file: Path, output_file: Path) -> None:
     pypandoc = ensure_python_dependency("pypandoc")
     ensure_python_dependency("ebooklib", "EbookLib")
     ensure_pandoc_available(pypandoc)
-    pdf_engine = ensure_pdf_engine_available()
+    pdf_engine = ensure_pdf_engine_available(preferred_engine)
+    engine_name = Path(pdf_engine).stem.lower()
+
+    extra_args = [f"--pdf-engine={pdf_engine}", "-V", f"geometry:margin={margin}"]
+    if mainfont and engine_name in ("xelatex", "lualatex"):
+        extra_args.extend(["-V", f"mainfont={mainfont}"])
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
     pypandoc.convert_file(
         str(input_file),
         "pdf",
         outputfile=str(output_file),
-        extra_args=[f"--pdf-engine={pdf_engine}"],
+        extra_args=extra_args,
     )
 
 
@@ -238,6 +261,20 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="?",
         help="Optional output PDF path. Defaults to input path with .pdf extension.",
     )
+    parser.add_argument(
+        "--margin",
+        default="18mm",
+        help="PDF page margin for LaTeX geometry (e.g. 12mm, 1.5cm). Default: 18mm.",
+    )
+    parser.add_argument(
+        "--pdf-engine",
+        choices=["xelatex", "lualatex", "tectonic", "pdflatex"],
+        help="Optional PDF engine to force. By default, the script prefers xelatex/lualatex.",
+    )
+    parser.add_argument(
+        "--mainfont",
+        help="Optional main font name (useful for xelatex/lualatex, e.g. 'Noto Serif').",
+    )
     return parser
 
 
@@ -247,9 +284,20 @@ def main() -> int:
 
     input_path = Path(args.input_file).expanduser().resolve()
     output_path = resolve_output_path(input_path, args.output_file)
+    margin = str(args.margin).strip()
+
+    if not margin:
+        print("Error: --margin cannot be empty.", file=sys.stderr)
+        return 1
 
     try:
-        convert_epub_to_pdf(input_path, output_path)
+        convert_epub_to_pdf(
+            input_path,
+            output_path,
+            margin=margin,
+            preferred_engine=args.pdf_engine,
+            mainfont=args.mainfont,
+        )
     except Exception as exc:  # pragma: no cover
         print(f"Error: {exc}", file=sys.stderr)
         return 1
