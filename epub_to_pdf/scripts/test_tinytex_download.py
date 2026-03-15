@@ -53,12 +53,12 @@ def test_download_logic():
                     matches.append(name)
         
         if matches:
-            print(f"  ✅ Found {len(matches)} match(es):")
+            print(f"  [PASS] Found {len(matches)} match(es):")
             for match in matches:
                 print(f"     - {match}")
             results[platform_name] = True
         else:
-            print(f"  ❌ No matches found!")
+            print(f"  [FAIL] No matches found!")
             results[platform_name] = False
         print()
     
@@ -68,16 +68,16 @@ def test_download_logic():
     all_pass = all(results.values())
     
     for platform, passed in results.items():
-        status = "✅ PASS" if passed else "❌ FAIL"
+        status = "[PASS]" if passed else "[FAIL]"
         print(f"  {platform}: {status}")
     
     print("=" * 60)
     
     if all_pass:
-        print("\n✅ All platforms can download TinyTeX successfully!")
+        print("\n[OK] All platforms can download TinyTeX successfully!")
         return 0
     else:
-        print("\n❌ Some platforms failed. Check the logic above.")
+        print("\n[FAIL] Some platforms failed. Check the logic above.")
         print("\nAvailable assets:")
         for asset in assets:
             print(f"  - {asset.get('name', 'unknown')}")

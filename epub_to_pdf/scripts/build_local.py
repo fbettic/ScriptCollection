@@ -26,7 +26,7 @@ def check_dependencies():
         print(f"Install with: pip install {' '.join(missing)}")
         sys.exit(1)
     
-    print("✓ Dependencies check passed")
+    print("[OK] Dependencies check passed")
 
 
 def clean_build_artifacts():
@@ -59,9 +59,9 @@ def build_executable():
     
     try:
         result = subprocess.run(cmd, check=True)
-        print("\n✓ Build completed successfully")
+        print("\n[OK] Build completed successfully")
     except subprocess.CalledProcessError as e:
-        print(f"\n✗ Build failed with exit code {e.returncode}")
+        print(f"\n[FAIL] Build failed with exit code {e.returncode}")
         sys.exit(1)
 
 
@@ -77,7 +77,7 @@ def show_output_info():
     
     if exe_path.exists():
         size_mb = exe_path.stat().st_size / (1024 * 1024)
-        print(f"\n✓ Executable created: {exe_path}")
+        print(f"\n[OK] Executable created: {exe_path}")
         print(f"  Size: {size_mb:.1f} MB")
         print(f"\nTest with:")
         print(f'  {exe_path} "path/to/file.epub"')

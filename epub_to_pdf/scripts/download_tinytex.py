@@ -79,10 +79,10 @@ def download_tinytex(platform_name: str, output_dir: Path) -> Path:
             # (for now, prefer x86_64 for better compatibility)
             if "arm64" not in name_lower:
                 candidates.append(asset)
-                print(f"    ✓ Matched: {name}")
+                print(f"    [OK] Matched: {name}")
     
     if not candidates:
-        print(f"\n❌ No TinyTeX release found for {platform_name}", file=sys.stderr)
+        print(f"\nERROR: No TinyTeX release found for {platform_name}", file=sys.stderr)
         print(f"Expected pattern: TinyTeX-1-*.{suffix} or TinyTeX-*.{suffix} (excluding TinyTeX-0-*)", file=sys.stderr)
         print(f"\nAvailable assets:", file=sys.stderr)
         for asset in assets:
@@ -109,7 +109,7 @@ def download_tinytex(platform_name: str, output_dir: Path) -> Path:
     try:
         urllib.request.urlretrieve(download_url, output_path)
         file_size_mb = output_path.stat().st_size / (1024 * 1024)
-        print(f"✓ Downloaded: {output_path} ({file_size_mb:.1f} MB)")
+        print(f"[OK] Downloaded: {output_path} ({file_size_mb:.1f} MB)")
         return output_path
     except Exception as e:
         print(f"Error downloading TinyTeX: {e}", file=sys.stderr)
@@ -143,7 +143,7 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
     
     output_path = download_tinytex(platform_name, args.output)
-    print(f"\n✓ TinyTeX ready for release: {output_path}")
+    print(f"\n[OK] TinyTeX ready for release: {output_path}")
 
 
 if __name__ == "__main__":
