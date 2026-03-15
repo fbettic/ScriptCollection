@@ -50,11 +50,13 @@ Referencias rapidas:
 
 Por defecto el script prioriza motores con mejor soporte Unicode (`xelatex`, `lualatex`) y luego prueba `tectonic`/`pdflatex`.
 
-Puedes forzar motor:
+Puedes indicar motor preferido:
 
 ```bash
 epub2pdf "/ruta/al/archivo.epub" --pdf-engine xelatex
 ```
+
+Si el motor preferido no esta instalado, el script usa un fallback automatico y, si hace falta, descarga `tectonic` en modo headless.
 
 Tambien puedes indicar fuente principal (recomendado con `xelatex` o `lualatex`):
 
@@ -77,7 +79,7 @@ epub2pdf "/ruta/al/archivo.epub" --pdf-engine xelatex --font-mode local
 epub2pdf "/ruta/al/archivo.epub" --pdf-engine lualatex --font-mode local --fonts-dir "./mis-fuentes"
 ```
 
-Nota: el modo de fuentes aplica principalmente a `xelatex` y `lualatex`.
+Nota: el modo de fuentes aplica a `xelatex` y `lualatex`. Si se usa fallback a `tectonic`, se prioriza completar la conversion aunque parte de la configuracion tipografica avanzada puede no aplicar igual.
 
 ## Ajuste de texto e imagen
 

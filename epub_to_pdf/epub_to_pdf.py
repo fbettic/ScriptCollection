@@ -110,7 +110,7 @@ def build_latex_layout_header(
                     r"\usepackage{fontspec}",
                     r"\usepackage{unicode-math}",
                     r"\defaultfontfeatures{Ligatures=TeX}",
-                    rf"\setmainfont[Path={{{latex_path}/}},UprightFont=NotoSerif-Regular.ttf,BoldFont=NotoSerif-Bold.ttf,ItalicFont=NotoSerif-Italic.ttf,BoldItalicFont=NotoSerif-BoldItalic.ttf]{{Noto Serif}}",
+                    rf"\setmainfont[Path={{{latex_path}/}},Extension=.ttf,UprightFont=*-Regular,BoldFont=*-Bold,ItalicFont=*-Italic,BoldItalicFont=*-BoldItalic]{{NotoSerif}}",
                     rf"\setmathfont[Path={{{latex_path}/}}]{{NotoSansMath-Regular.ttf}}",
                 ]
             )
@@ -331,10 +331,22 @@ def ensure_pdf_engine_available(preferred_engine: str | None = None, strict: boo
     if preferred_engine == "tectonic":
         return ensure_tectonic_available()
 
-    if preferred_engine and strict:
-        raise RuntimeError(
-            f"Requested PDF engine '{preferred_engine}' is not installed or not in PATH."
+    if preferred_engine:
+        # If preferred engine is missing, fallback to any available one.
+        fallback_engine = find_pdf_engine()
+        if fallback_engine:
+            print(
+                f"Preferred engine '{preferred_engine}' not found. Using '{Path(fallback_engine).stem}' instead.",
+                file=sys.stderr,
+            )
+            return fallback_engine
+
+        # No engine found in PATH: auto-provision tectonic.
+        print(
+            f"Preferred engine '{preferred_engine}' not found. Auto-provisioning 'tectonic'.",
+            file=sys.stderr,
         )
+        return ensure_tectonic_available()
 
     return ensure_tectonic_available()
 
