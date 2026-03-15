@@ -42,31 +42,51 @@ def download_tinytex(platform_name: str, output_dir: Path) -> Path:
     assets = payload.get("assets", [])
     tag_name = payload.get("tag_name", "unknown")
     
-    # Find appropriate asset for platform
-    platform_map = {
-        "windows": (".zip", "windows"),
-        "linux": (".tar.gz", "linux"),
-        "macos": (".tar.gz", "darwin"),
+    print(f"Found {len(assets)} assets in release {tag_name}")
+    
+    # TinyTeX releases now use only extension to distinguish platform:
+    # - .zip for Windows
+    # - .tar.gz for Linux/macOS
+    # Names follow pattern: TinyTeX-1-v2026.03.02.zip or TinyTeX-1-v2026.03.02.tar.gz
+    platform_suffix = {
+        "windows": ".zip",
+        "linux": ".tar.gz",
+        "macos": ".tar.gz",
     }
     
-    if platform_name not in platform_map:
+    if platform_name not in platform_suffix:
         print(f"Unknown platform: {platform_name}", file=sys.stderr)
         sys.exit(1)
     
-    suffix, keyword = platform_map[platform_name]
+    suffix = platform_suffix[platform_name]
     
     candidates = []
     for asset in assets:
         name = asset.get("name", "")
+        name_lower = name.lower()
+        
+        # Debug: show all assets with matching suffix
+        if name.endswith(suffix):
+            print(f"  Checking asset: {name}")
+        
+        # Must end with correct suffix
         if not name.endswith(suffix):
             continue
-        if keyword not in name.lower():
-            continue
-        if name.startswith("TinyTeX-1-") or name.startswith("TinyTeX-"):
-            candidates.append(asset)
+        
+        # Prefer TinyTeX-1 but accept TinyTeX as well (exclude TinyTeX-0)
+        if name.startswith("TinyTeX-1-") or (name.startswith("TinyTeX-") and not name.startswith("TinyTeX-0-")):
+            # Skip arm64 versions unless we specifically want them
+            # (for now, prefer x86_64 for better compatibility)
+            if "arm64" not in name_lower:
+                candidates.append(asset)
+                print(f"    ✓ Matched: {name}")
     
     if not candidates:
-        print(f"No TinyTeX release found for {platform_name}", file=sys.stderr)
+        print(f"\n❌ No TinyTeX release found for {platform_name}", file=sys.stderr)
+        print(f"Expected pattern: TinyTeX-1-*.{suffix} or TinyTeX-*.{suffix} (excluding TinyTeX-0-*)", file=sys.stderr)
+        print(f"\nAvailable assets:", file=sys.stderr)
+        for asset in assets:
+            print(f"  - {asset.get('name', 'unknown')}", file=sys.stderr)
         sys.exit(1)
     
     # Prefer TinyTeX-1 (minimal version)
@@ -83,7 +103,7 @@ def download_tinytex(platform_name: str, output_dir: Path) -> Path:
     filename = selected["name"]
     output_path = output_dir / filename
     
-    print(f"Downloading {filename} from {tag_name}...")
+    print(f"\nDownloading {filename} from {tag_name}...")
     print(f"URL: {download_url}")
     
     try:

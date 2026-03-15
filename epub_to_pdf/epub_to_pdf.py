@@ -115,33 +115,43 @@ def download_tinytex() -> None:
     machine = platform.machine().lower()
     assets = payload.get("assets", [])
     
+    # TinyTeX releases use only extension to distinguish platform (no platform keywords in name)
     if os.name == "nt":
         suffix = ".zip"
+        prefers_arm = machine in ("arm64", "aarch64")
+    elif platform.system() == "Darwin":
+        suffix = ".tar.gz"
         prefers_arm = machine in ("arm64", "aarch64")
     else:
         suffix = ".tar.gz"
         prefers_arm = machine in ("arm64", "aarch64")
     
     def rank(name: str) -> tuple[int, int, int]:
-        tinytex1 = 1 if name.startswith("TinyTeX-1-") else 0
-        tinytex = 1 if name.startswith("TinyTeX-") else 0
-        arm = 1 if "arm64" in name else 0
-        arm_match = 1 if (arm == 1 and prefers_arm) or (arm == 0 and not prefers_arm) else 0
+        name_lower = name.lower()
+        # Prefer TinyTeX-1 (minimal) over TinyTeX (full) and TinyTeX-0 (even smaller but maybe too minimal)
+        tinytex1 = 2 if name.startswith("TinyTeX-1-") else 0
+        tinytex = 1 if name.startswith("TinyTeX-") and not name.startswith("TinyTeX-0-") else 0
+        # Check ARM architecture
+        is_arm = 1 if "arm64" in name_lower or "aarch64" in name_lower else 0
+        arm_match = 1 if (is_arm == 1 and prefers_arm) or (is_arm == 0 and not prefers_arm) else 0
         return (tinytex1, tinytex, arm_match)
     
     compatible = []
     for asset in assets:
         name = asset.get("name", "")
+        
+        # Must end with correct suffix
         if not name.endswith(suffix):
             continue
-        if not (name.startswith("TinyTeX-1-") or name.startswith("TinyTeX-")):
-            continue
-        url = asset.get("browser_download_url")
-        if url:
-            compatible.append((rank(name), asset))
+        
+        # Must start with TinyTeX-1 or TinyTeX (but not TinyTeX-0)
+        if name.startswith("TinyTeX-1-") or (name.startswith("TinyTeX-") and not name.startswith("TinyTeX-0-")):
+            url = asset.get("browser_download_url")
+            if url:
+                compatible.append((rank(name), asset))
     
     if not compatible:
-        raise RuntimeError("Could not find compatible TinyTeX release for this platform")
+        raise RuntimeError(f"Could not find compatible TinyTeX release for this platform (suffix: {suffix})")
     
     compatible.sort(key=lambda item: item[0], reverse=True)
     selected = compatible[0][1]
