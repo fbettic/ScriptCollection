@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "epub-to-pdf-cli"
-version = "0.2.1"
-description = "Convert EPUB files to PDF from the command line with self-managed TinyTeX"
+version = "0.3.0"
+description = "Convert EPUB files to PDF from the command line with automatic TinyTeX provisioning"
 readme = "README.md"
 requires-python = ">=3.9"
 authors = [
@@ -13,6 +13,11 @@ authors = [
 ]
 dependencies = [
     "pypandoc>=1.13"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pyinstaller>=6.0",
 ]
 
 [project.scripts]

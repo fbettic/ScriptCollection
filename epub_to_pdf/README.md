@@ -2,14 +2,38 @@
 
 Convierte archivos EPUB a PDF desde la terminal.
 
-El script es autosuficiente en la primera ejecucion:
+## Instalación Rápida (Binarios Precompilados) ⚡
 
-- Instala la dependencia Python faltante (`pypandoc`).
-- Descarga `pandoc` si no esta disponible.
-- Descarga `TinyTeX` en modo headless (sin instaladores GUI), en cache de usuario.
-- Descarga fuentes locales en `fonts/` para mejorar cobertura de simbolos matematicos Unicode.
+**¡No requiere Python!** Descarga el ejecutable standalone para tu plataforma:
 
-## Instalacion desde GitHub (un comando)
+- **[Windows (x64)](../../releases/latest)**: `epub2pdf-windows-x64.zip` (~10 MB)
+- **[Linux (x64)](../../releases/latest)**: `epub2pdf-linux-x64.tar.gz` (~8 MB)
+
+Extrae y ejecuta:
+```bash
+# Windows (PowerShell)
+.\epub2pdf.exe mybook.epub
+
+# Linux
+./epub2pdf mybook.epub
+```
+
+En la primera ejecución, TinyTeX (~100 MB) se descargará automáticamente. Ver [RELEASES.md](../../RELEASES.md) para más detalles.
+
+---
+
+## Instalación desde Código Fuente (Python)
+
+Si prefieres instalar desde código fuente con Python:
+
+El script gestiona automáticamente sus dependencias en la primera ejecución:
+
+- Instala la dependencia Python faltante (`pypandoc`)
+- Descarga `pandoc` si no está disponible
+- Descarga `TinyTeX` en modo headless (sin instaladores GUI), en cache de usuario
+- Descarga fuentes locales en `fonts/` para mejorar cobertura de símbolos matemáticos Unicode
+
+### Instalación desde GitHub (un comando)
 
 ```bash
 python -m pip install "git+https://github.com/fbettic/ScriptCollection.git#subdirectory=epub_to_pdf"
