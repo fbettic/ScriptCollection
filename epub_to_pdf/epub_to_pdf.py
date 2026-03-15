@@ -44,7 +44,7 @@ PROFILE_PRESETS: dict[str, dict[str, str | int | None]] = {
         "image_layout": "contain",
     },
     "math": {
-        "margin": "15mm",
+        "margin": "25mm",
         "mainfont": "Noto Serif",
         "dpi": 300,
         "pdf_engine": "xelatex",
@@ -122,6 +122,20 @@ def build_latex_layout_header(
                     rf"\setmainfont{{{mainfont}}}",
                 ]
             )
+    elif engine_name == "pdflatex":
+        # Fallback for pdflatex where Unicode glyph coverage is limited by default fonts.
+        lines.extend(
+            [
+                r"\usepackage[T1]{fontenc}",
+                r"\usepackage[utf8]{inputenc}",
+                r"\usepackage{textcomp}",
+                r"\DeclareUnicodeCharacter{03C0}{\ensuremath{\pi}}",
+                r"\DeclareUnicodeCharacter{03C6}{\ensuremath{\phi}}",
+                r"\DeclareUnicodeCharacter{03A6}{\ensuremath{\Phi}}",
+                r"\DeclareUnicodeCharacter{03BC}{\ensuremath{\mu}}",
+                r"\DeclareUnicodeCharacter{0394}{\ensuremath{\Delta}}",
+            ]
+        )
 
     if image_layout == "contain":
         lines.extend(
@@ -139,11 +153,12 @@ def build_latex_layout_header(
         lines.extend(
             [
                 # Reduce overfull/underfull warnings by allowing a bit more stretch.
-                r"\setlength{\emergencystretch}{3em}",
+                r"\setlength{\emergencystretch}{5em}",
                 r"\tolerance=1800",
                 r"\hbadness=2500",
                 r"\hfuzz=1pt",
                 r"\vfuzz=1pt",
+                r"\sloppy",
             ]
         )
 
@@ -179,6 +194,152 @@ def get_local_bin_dir() -> Path:
     else:
         base = Path(os.environ.get("XDG_CACHE_HOME", str(Path.home() / ".cache")))
     return base / "epub_to_pdf" / "bin"
+
+
+def get_local_tinytex_dir() -> Path:
+    """Return local install directory for TinyTeX managed by this script."""
+    if os.name == "nt":
+        base = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData/Local")))
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library/Caches"
+    else:
+        base = Path(os.environ.get("XDG_CACHE_HOME", str(Path.home() / ".cache")))
+    return base / "epub_to_pdf" / "tinytex"
+
+
+def tinytex_bin_candidates(tinytex_dir: Path) -> list[Path]:
+    """Return likely TinyTeX bin directories for current platform."""
+    if os.name == "nt":
+        return [
+            tinytex_dir / "bin" / "windows",
+            tinytex_dir / "bin" / "win32",
+            tinytex_dir / "bin" / "win64",
+        ]
+    if sys.platform == "darwin":
+        return [
+            tinytex_dir / "bin" / "universal-darwin",
+            tinytex_dir / "bin" / "x86_64-darwin",
+            tinytex_dir / "bin" / "arm64-darwin",
+        ]
+    return [
+        tinytex_dir / "bin" / "x86_64-linux",
+        tinytex_dir / "bin" / "aarch64-linux",
+    ]
+
+
+def add_tinytex_to_path(tinytex_dir: Path) -> None:
+    """Add TinyTeX bin directories to PATH for current process."""
+    executable_names = ["xelatex", "lualatex", "pdflatex"]
+    for engine in executable_names:
+        filename = f"{engine}.exe" if os.name == "nt" else engine
+        for path in tinytex_dir.rglob(filename):
+            add_to_path(path.parent)
+    for candidate in tinytex_bin_candidates(tinytex_dir):
+        if candidate.exists():
+            add_to_path(candidate)
+
+
+def find_engine_in_tinytex(tinytex_dir: Path, engine: str) -> str | None:
+    """Find an engine executable inside TinyTeX install directory."""
+    executable_name = f"{engine}.exe" if os.name == "nt" else engine
+    for candidate in tinytex_bin_candidates(tinytex_dir):
+        engine_path = candidate / executable_name
+        if engine_path.exists():
+            return str(engine_path.resolve())
+    for path in tinytex_dir.rglob(executable_name):
+        return str(path.resolve())
+    return None
+
+
+def query_latest_tinytex_asset_url() -> tuple[str, str]:
+    """Get TinyTeX asset URL and name for current platform from GitHub releases."""
+    api_url = "https://api.github.com/repos/rstudio/tinytex-releases/releases/latest"
+    request = urllib.request.Request(
+        api_url,
+        headers={"Accept": "application/vnd.github+json", "User-Agent": "epub-to-pdf-cli"},
+    )
+    with urllib.request.urlopen(request, timeout=NETWORK_TIMEOUT_SECONDS) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+
+    machine = platform.machine().lower()
+    assets = payload.get("assets", [])
+
+    if os.name == "nt":
+        suffix = ".zip"
+        prefers_arm = machine in ("arm64", "aarch64")
+    elif sys.platform == "darwin":
+        suffix = ".tar.gz"
+        prefers_arm = machine in ("arm64", "aarch64")
+    else:
+        suffix = ".tar.gz"
+        prefers_arm = machine in ("arm64", "aarch64")
+
+    def rank(name: str) -> tuple[int, int, int]:
+        # Prioritize TinyTeX-1 then TinyTeX, and architecture match.
+        tinytex1 = 1 if name.startswith("TinyTeX-1-") else 0
+        tinytex = 1 if name.startswith("TinyTeX-") else 0
+        arm = 1 if "arm64" in name else 0
+        arm_match = 1 if (arm == 1 and prefers_arm) or (arm == 0 and not prefers_arm) else 0
+        return (tinytex1, tinytex, arm_match)
+
+    compatible: list[tuple[tuple[int, int, int], dict]] = []
+    for asset in assets:
+        name = asset.get("name", "")
+        if not name.endswith(suffix):
+            continue
+        if not (name.startswith("TinyTeX-1-") or name.startswith("TinyTeX-")):
+            continue
+        url = asset.get("browser_download_url")
+        if not url:
+            continue
+        compatible.append((rank(name), asset))
+
+    if not compatible:
+        raise RuntimeError("Could not find a compatible TinyTeX release asset for this OS.")
+
+    compatible.sort(key=lambda item: item[0], reverse=True)
+    selected = compatible[0][1]
+    return selected["browser_download_url"], selected["name"]
+
+
+def ensure_tinytex_available(preferred_engine: str | None = None) -> str | None:
+    """Install TinyTeX headlessly if needed and return an available engine path."""
+    desired = preferred_engine if preferred_engine in ("xelatex", "lualatex", "pdflatex") else "xelatex"
+    tinytex_dir = get_local_tinytex_dir()
+
+    if tinytex_dir.exists():
+        add_tinytex_to_path(tinytex_dir)
+        existing = find_engine_in_tinytex(tinytex_dir, desired)
+        if existing:
+            return existing
+        for fallback in ("xelatex", "lualatex", "pdflatex"):
+            existing = find_engine_in_tinytex(tinytex_dir, fallback)
+            if existing:
+                return existing
+
+    print("No Unicode LaTeX engine found. Downloading TinyTeX (headless)...", file=sys.stderr)
+    tinytex_dir.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="epub_to_pdf_tinytex_") as temp_dir:
+        archive_url, archive_name = query_latest_tinytex_asset_url()
+        archive_path = Path(temp_dir) / archive_name
+        download_file(archive_url, archive_path)
+
+        if os.name == "nt":
+            with zipfile.ZipFile(archive_path) as archive:
+                archive.extractall(tinytex_dir)
+        else:
+            with tarfile.open(archive_path, "r:gz") as archive:
+                archive.extractall(tinytex_dir)
+
+    add_tinytex_to_path(tinytex_dir)
+    preferred = find_engine_in_tinytex(tinytex_dir, desired)
+    if preferred:
+        return preferred
+    for fallback in ("xelatex", "lualatex", "pdflatex"):
+        candidate = find_engine_in_tinytex(tinytex_dir, fallback)
+        if candidate:
+            return candidate
+    return None
 
 
 def add_to_path(directory: Path) -> None:
@@ -328,6 +489,12 @@ def ensure_pdf_engine_available(preferred_engine: str | None = None, strict: boo
     if existing_engine:
         return existing_engine
 
+    if preferred_engine in ("xelatex", "lualatex", "pdflatex") or preferred_engine is None:
+        tinytex_engine = ensure_tinytex_available(preferred_engine)
+        if tinytex_engine:
+            print(f"Using TinyTeX engine '{Path(tinytex_engine).stem}'.", file=sys.stderr)
+            return tinytex_engine
+
     if preferred_engine == "tectonic":
         return ensure_tectonic_available()
 
@@ -384,7 +551,7 @@ def convert_epub_to_pdf(
     engine_name = Path(pdf_engine).stem.lower()
 
     extra_args = [f"--pdf-engine={pdf_engine}", "-V", f"geometry:margin={margin}"]
-    if mainfont and engine_name in ("xelatex", "lualatex"):
+    if mainfont and engine_name in ("xelatex", "lualatex") and font_mode == "system":
         extra_args.extend(["-V", f"mainfont={mainfont}"])
     if dpi is not None:
         extra_args.append(f"--dpi={dpi}")
