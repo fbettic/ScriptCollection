@@ -14,3 +14,9 @@ Invoke-Command -ScriptBlock ([ScriptBlock]::Create((Invoke-RestMethod -Uri $url)
 ```
 
 ---
+
+
+## Customizar Terminal Linux
+```Bash
+curl -fsSL https://raw.githubusercontent.com/fbettic/ScriptCollection/main/customize_shell.sh | bash
+```
